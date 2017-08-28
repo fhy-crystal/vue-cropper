@@ -120,7 +120,9 @@ export default {
 			touches: [],
 			touchNow: false,
 			// 图片旋转
-			rotate: 0
+			rotate: 0,
+			// 图片是否需要旋转
+			orientation: 1
     }
   },
 	props: {
@@ -185,15 +187,15 @@ export default {
 	watch: {
 		// 如果图片改变， 重新布局
 		img () {
-			this.loading = true
-			this.scale = 1
-			this.clearCrop()
-			let img = new Image
-			img.onload = () => {
-        // 图片加载成功后布局
-				this.reload()
-      }
-			img.src = this.img
+			// this.loading = true
+			// this.scale = 1
+			// this.clearCrop()
+			// let img = new Image
+			// img.onload = () => {
+      //   // 图片加载成功后布局
+			// 	this.reload()
+      // }
+			// img.src = this.img
 		},
 		cropW () {
 			this.cropW = ~~(this.cropW)
@@ -720,19 +722,9 @@ export default {
 		//转化base64 为blob对象
 		getCropBlob(cb) {
 			this.getCropData((data) => {
-				var arr = data.split(',')
-			  var mime = arr[0].match(/:(.*?);/)[1]
-			  var bstr = atob(arr[1])
-			  var n = bstr.length
-			  var u8arr = new Uint8Array(n)
-				while (n--) {
-			    u8arr[n] = bstr.charCodeAt(n)
-			  }
 				cb(
-					new Blob([u8arr], {
-			    	type: mime
-			  	}
-				))
+					this.changeBlob(data)
+				)
 			})
 		},
 
@@ -755,36 +747,100 @@ export default {
 		},
 		// reload 图片布局函数
 		reload () {
-			// 得到外层容器的宽度高度
-			this.w =  ~~(window.getComputedStyle(this.$refs.cropper).width.replace('px', ''))
-			this.h =  ~~(window.getComputedStyle(this.$refs.cropper).height.replace('px', ''))
-
-			// 存入图片真实高度
-			this.trueWidth = this.$refs.cropperImg.width
-			this.trueHeight = this.$refs.cropperImg.height
-			this.rotate = 0
-
-			if (this.trueWidth > this.w) {
-				// 如果图片宽度大于容器宽度
-				this.scale = this.w / this.trueWidth
-			}
-
-			if (this.trueHeight * this.scale > this.h) {
-				this.scale = this.h / this.trueHeight
-			}
-
-			this.$nextTick(() => {
-				this.x = -(this.trueWidth - this.trueWidth * this.scale) / 2 + (this.w - this.trueWidth * this.scale) / 2
-				this.y = -(this.trueHeight - this.trueHeight * this.scale) / 2 + (this.h - this.trueHeight * this.scale) / 2
-				this.loading = false
-				// 获取是否开启了自动截图
-				if (this.autoCrop) {
-					this.goAutoCrop()
-				}
-
+			// 如果是上传的图读取偏移信息
+			let upload = this.img
+			if (upload.length > 1000) {
 				// 读取图片的信息原始信息， 解析是否需要旋转
+				let data = this.changeBlob(this.img)
+				let reader = new FileReader()
+				reader.onload = (e) => {
+					// console.log(data)
+					let b = new DataView(reader.result)
+					let orientation = this.getOrientation(b)
+					this.orientation = ~~(orientation)
+					this.refresh()
+				}
+				reader.readAsArrayBuffer(data)
+			} else {
+				this.refresh()
+			}
+		},
+
+		// 转换blob
+		changeBlob (data) {
+			let arr = data.split(',')
+			let mime = arr[0].match(/:(.*?);/)[1]
+			let bstr = atob(arr[1])
+			let n = bstr.length
+			let u8arr = new Uint8Array(n)
+			while (n--) {
+				u8arr[n] = bstr.charCodeAt(n)
+			}
+			return new Blob([u8arr], {
+				type: mime
 			})
 		},
+
+		// 获取图片的orientation信息
+		getOrientation (view) {
+			let
+			offset = 0,
+			len = view.byteLength,
+      APP1_offset, TIFF_offset, EXIF_offset, little, IFD0_offset, entries_count, entries_offset, resolve_value
+	    // SOI marker
+	    if (view.getUint16(0, false) != 0xFFD8) {
+				return('不是 JPEG 文件')
+			}
+
+	    // APP1 marker
+	    while (offset < len) {
+	      if (view.getUint16(offset, false) == 0xFFE1) break
+	      else offset += 2;
+	    }
+
+	    if (offset >= len) {
+				return('没找到 APP1 标识')
+			}
+
+	    // now offset point to APP1 marker 0xFFD8
+	    APP1_offset = offset
+
+	    // offset + 4 point offset to EXIF Header
+	    EXIF_offset = APP1_offset + 4
+
+	    // check if  have 'Exif' ascii string: 0x45786966
+	    if (view.getUint32(EXIF_offset, false) != 0x45786966) {
+				return('无 EXIF 信息')
+			}
+
+	    TIFF_offset = EXIF_offset + 6
+
+	    // offset + 4 point offset to EXIF header's 0x0000
+	    // offset + 4 + 2 point offset to TIFF header
+	    // 0x4d4d: big endian, 0x4949: little endian
+	    little = view.getUint16(TIFF_offset, false) == 0x4949 ? true : false
+
+	    IFD0_offset = TIFF_offset + view.getUint32(TIFF_offset + 4)
+
+			if (IFD0_offset > len) {
+				return 0
+			}
+	    entries_count = view.getUint16(IFD0_offset, little)
+	    entries_offset = IFD0_offset + 2
+
+	    for (let i = 0; i < entries_count; i++) {
+	      // 0x0112's format is 3 which value format is unsigned short
+	      // components is 1
+	      // 3 * 1 < 4
+	      // so the value offset is actually value not the offset to the value
+	      if (view.getUint16(entries_offset + (i * 12), little) == 0x0112) {
+	        let resolve_value = view.getUint16(entries_offset + (i * 12) + 8, little)
+	        return resolve_value
+	      }
+	    }
+	    return('没有 orientation 信息')
+		},
+
 		// 自动截图函数
 		goAutoCrop () {
 			this.cropping = true
@@ -819,7 +875,40 @@ export default {
 		},
 		// 重置函数， 恢复组件置初始状态
 		refresh () {
-			// console.log('refresh')
+			//得到外层容器的宽度高度
+			this.w =  ~~(window.getComputedStyle(this.$refs.cropper).width.replace('px', ''))
+			this.h =  ~~(window.getComputedStyle(this.$refs.cropper).height.replace('px', ''))
+			// 只处理等于6 的情况
+			if (this.orientation === 6) {
+				// 存入图片真实高度
+				this.trueWidth = this.$refs.cropperImg.height
+				this.trueHeight = this.$refs.cropperImg.width
+				this.rotate = 1
+			} else {
+				// 存入图片真实高度
+				this.trueWidth = this.$refs.cropperImg.width
+				this.trueHeight = this.$refs.cropperImg.height
+				this.rotate = 0
+			}
+
+			if (this.trueWidth > this.w) {
+				// 如果图片宽度大于容器宽度
+				this.scale = this.w / this.trueWidth
+			}
+
+			if (this.trueHeight * this.scale > this.h) {
+				this.scale = this.h / this.trueHeight
+			}
+
+			this.$nextTick(() => {
+				this.x = -(this.trueWidth - this.trueWidth * this.scale) / 2 + (this.w - this.trueWidth * this.scale) / 2
+				this.y = -(this.trueHeight - this.trueHeight * this.scale) / 2 + (this.h - this.trueHeight * this.scale) / 2
+				this.loading = false
+				// 获取是否开启了自动截图
+				if (this.autoCrop) {
+					this.goAutoCrop()
+				}
+			})
 		},
 
 		// 向左边旋转
