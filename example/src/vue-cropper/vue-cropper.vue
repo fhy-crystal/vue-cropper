@@ -188,8 +188,8 @@ export default {
 		// 如果图片改变， 重新布局
 		img () {
 			// this.loading = true
-			// this.scale = 1
-			// this.clearCrop()
+			this.scale = 1
+			this.clearCrop()
 			// let img = new Image
 			// img.onload = () => {
       //   // 图片加载成功后布局
@@ -878,16 +878,15 @@ export default {
 			//得到外层容器的宽度高度
 			this.w =  ~~(window.getComputedStyle(this.$refs.cropper).width.replace('px', ''))
 			this.h =  ~~(window.getComputedStyle(this.$refs.cropper).height.replace('px', ''))
+
+			// 存入图片真实高度
+			this.trueWidth = this.$refs.cropperImg.width
+			this.trueHeight = this.$refs.cropperImg.height
+
 			// 只处理等于6 的情况
 			if (this.orientation === 6) {
-				// 存入图片真实高度
-				this.trueWidth = this.$refs.cropperImg.height
-				this.trueHeight = this.$refs.cropperImg.width
 				this.rotate = 1
 			} else {
-				// 存入图片真实高度
-				this.trueWidth = this.$refs.cropperImg.width
-				this.trueHeight = this.$refs.cropperImg.height
 				this.rotate = 0
 			}
 

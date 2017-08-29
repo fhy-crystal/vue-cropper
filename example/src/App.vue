@@ -289,7 +289,7 @@ export default {
 				img: '',
 				size: 1,
 				full: false,
-				outputType: 'png'
+				outputType: 'jpeg'
 			},
 			example2: {
 				img: 'http://ofyaji162.bkt.clouddn.com/bg1.jpg',
